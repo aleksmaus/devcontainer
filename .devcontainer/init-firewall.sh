@@ -23,6 +23,7 @@ iptables -P OUTPUT ACCEPT
 cat > /etc/resolv.conf <<'EOF'
 nameserver 1.1.1.1
 nameserver 1.0.0.1
+options single-request no-aaaa timeout:2 attempts:2
 EOF
 
 # First allow DNS and localhost before any restrictions
@@ -124,7 +125,7 @@ iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 
 echo "Firewall configuration complete"
 echo "Verifying firewall rules..."
-if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
+if curl -4 --connect-timeout 5 https://example.com >/dev/null 2>&1; then
     echo "ERROR: Firewall verification failed - was able to reach https://example.com"
     exit 1
 else
