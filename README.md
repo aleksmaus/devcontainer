@@ -2,6 +2,8 @@
 
 Sandboxed environment for running Claude Code against this project. Adapted from [Anthropic's reference devcontainer](https://github.com/anthropics/claude-code/tree/main/.devcontainer).
 
+Usage: copy the `.devcontainer` into the new project and follow the instructions below.
+
 ## Files
 
 Three files in `.devcontainer/`:
