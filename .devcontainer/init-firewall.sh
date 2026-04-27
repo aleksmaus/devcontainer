@@ -2,27 +2,28 @@
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
 IFS=$'\n\t'       # Stricter word splitting
 
-# 1. Extract Docker DNS info BEFORE any flushing
-DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
-
 # Flush existing rules and delete existing ipsets
 iptables -F
 iptables -X
-iptables -t nat -F
-iptables -t nat -X
-iptables -t mangle -F
-iptables -t mangle -X
 ipset destroy allowed-domains 2>/dev/null || true
 
-# 2. Selectively restore ONLY internal Docker DNS resolution
-if [ -n "$DOCKER_DNS_RULES" ]; then
-    echo "Restoring Docker DNS rules..."
-    iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
-    iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
-    echo "$DOCKER_DNS_RULES" | xargs -L 1 iptables -t nat
-else
-    echo "No Docker DNS rules to restore"
-fi
+# Reset default policies to ACCEPT so the fetch/resolve steps below can reach
+# the network. A previous failed run may have left policies as DROP, which
+# would silently break curl/dig before we get to set up our allow rules.
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+
+# Bypass Docker's embedded DNS at 127.0.0.11 and point resolv.conf at a
+# public resolver. Docker's embedded DNS depends on a DNAT rule in the nat
+# table that this container can lose if any iptables tooling flushes nat —
+# once gone, it can only be re-added by recreating the container, not by
+# restart. Using a public resolver makes DNS robust regardless of nat state.
+# The firewall allows outbound UDP/53 to anywhere, so this works.
+cat > /etc/resolv.conf <<'EOF'
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+EOF
 
 # First allow DNS and localhost before any restrictions
 # Allow outbound DNS
@@ -60,7 +61,7 @@ while read -r cidr; do
         exit 1
     fi
     echo "Adding GitHub range $cidr"
-    ipset add allowed-domains "$cidr"
+    ipset add allowed-domains "$cidr" -exist
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
 # Resolve and add other allowed domains
@@ -88,7 +89,7 @@ for domain in \
             exit 1
         fi
         echo "Adding $ip for $domain"
-        ipset add allowed-domains "$ip"
+        ipset add allowed-domains "$ip" -exist
     done < <(echo "$ips")
 done
 
