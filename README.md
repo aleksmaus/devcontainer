@@ -1,4 +1,4 @@
-# testclaude devcontainer
+# devcontainer
 
 Sandboxed environment for running Claude Code against this project. Adapted from [Anthropic's reference devcontainer](https://github.com/anthropics/claude-code/tree/main/.devcontainer).
 
